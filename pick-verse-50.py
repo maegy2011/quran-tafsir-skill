@@ -40,20 +40,47 @@ def get_tafsir(surah: int, ayah: int):
 
 def main():
     n = 1
-    if len(sys.argv) > 2 and sys.argv[1] == "--count":
-        n = int(sys.argv[2])
+    user = None
+    args = sys.argv[1:]
+    # --user CHAT_ID لتتبع per-user + --count N
+    if "--user" in args:
+        i = args.index("--user")
+        if i + 1 < len(args):
+            user = str(args[i + 1])
+    if "--count" in args:
+        i = args.index("--count")
+        if i + 1 < len(args):
+            try:
+                n = int(args[i + 1])
+            except ValueError:
+                n = 1
     ready = load(os.path.join(QDIR, "tafsir-short.json"), {}).get("keys") \
         or load(os.path.join(QDIR, "tafsir-ready.json"), {}).get("keys", [])
+    # per-user state: used-verses-users.json {chat_id: [keys]} + auto-reset عند النفاد
+    users_path = os.path.join(QDIR, "used-verses-users.json")
+    users_map = load(users_path, {})
+    if not isinstance(users_map, dict):
+        users_map = {}
+    used_user = set(users_map.get(str(user), []) if user else [])
     raw = load(os.path.join(QDIR, "used-verses.json"), [])
     used = set(raw.get("used", []) if isinstance(raw, dict) else raw)
+    # إن استنفد المستخدم كل القائمة المفلترة → إعادة تدوير تلقائية لدورة جديدة
+    if user and len(used_user) >= len(ready) and ready:
+        used_user = set()
     rng = random.SystemRandom()
     out = []
     attempts = 0
     while len(out) < n and attempts < 5000:
         attempts += 1
         key = rng.choice(ready)
-        if key in used:
-            continue
+        if key in used or (user and key in used_user):
+            # لو القائمة العالمية غطت كل الجاهز لكن المستخدم لم يستنفد، اسمح بآية خارج العالمية بشرط عدم تكرارها للمستخدم
+            if key in used_user:
+                continue
+            if user and key not in used_user:
+                pass  # per-user يتجاوز العالمي لمنع الجمود
+            else:
+                continue
         s, a = key.split(":")
         tafsir, eya, surah_name = get_tafsir(int(s), int(a))
         if not tafsir:
@@ -65,10 +92,16 @@ def main():
         if not verse:
             continue
         used.add(key)
+        if user:
+            used_user.add(key)
         out.append({"key": key, "surah": surah_name, "verse": verse,
                     "tafsir": tafsir, "words": wc})
-    # حفظ الاستخدام (يقبل الصيغتين list / dict)
+    # حفظ الاستخدام (يقبل الصيغتين list / dict) + حفظ per-user مع auto-reset
     try:
+        if user:
+            users_map[str(user)] = sorted(used_user)
+            with open(users_path, "w", encoding="utf-8") as f:
+                json.dump(users_map, f, ensure_ascii=False)
         old = load(os.path.join(QDIR, "used-verses.json"), [])
         if isinstance(old, dict):
             old["used"] = sorted(used)

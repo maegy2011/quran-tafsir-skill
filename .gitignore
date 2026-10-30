@@ -1,4 +1,6 @@
 used-verses.json
+used-verses-users.json
 last-verse.json
 last-pick.json
 __pycache__/
+*.pyc

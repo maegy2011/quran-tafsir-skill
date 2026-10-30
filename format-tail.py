@@ -36,10 +36,12 @@ def split_sentences(tafsir):
                 out.append(part)
     return out
 
-key = sys.argv[1] if len(sys.argv) > 1 else None
-ai_exp = sys.argv[2] if len(sys.argv) > 2 else None
+args = [x for x in sys.argv[1:] if not x.startswith("--")]
+html_mode = "--html" in sys.argv
+key = args[0] if len(args) > 0 else None
+ai_exp = args[1] if len(args) > 1 else None
 if not key or not ai_exp:
-    print("usage: format-tail.py S:A AI_EXPLANATION<=20 words (required)", file=sys.stderr); sys.exit(2)
+    print("usage: format-tail.py [--html] S:A AI_EXPLANATION<=20 words (required)", file=sys.stderr); sys.exit(2)
 if len(ai_exp.split()) > 20:
     print("AI_EXPLANATION_TOO_LONG: " + str(len(ai_exp.split())) + " words (max 20)", file=sys.stderr); sys.exit(2)
 s, a = key.split(":"); s, a = int(s), int(a)
@@ -85,4 +87,17 @@ out = {
     "chunks": [{"aside": c} for c in chunks],
     "footer_placeholder": "🤖 <model> | 🧠 <thinking> | 📥 <in> / 📤 <out> | 📚 <ctx>/<total> (<pct>) | 💾 <cache%>",
 }
+# قالب HTML الموحد (خطة 30 أكتوبر 2026 — expandable blockquote)
+if html_mode:
+    import html as _h
+    out["html"] = (
+        "━━━━━━━━━━━━━━━━━━━\n"
+        f"✨ <b>﴿ {_h.escape(verse)} ﴾</b>\n"
+        f"📖 <i>سورة {_h.escape(name)} (الآية {a})</i>\n"
+        "<blockquote expandable>\n"
+        f"📖 <b>التفسير (ابن كثير):</b>\n{_h.escape(tafsir)}\n\n"
+        f"💡 <b>إضاءة تدبرية:</b>\n{_h.escape(ai_exp)}\n"
+        "</blockquote>\n"
+        "━━━━━━━━━━━━━━━━━━━"
+    )
 print(json.dumps(out, ensure_ascii=False))
