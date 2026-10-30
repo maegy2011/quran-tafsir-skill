@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""format-tail: تنسيق ذيل الرد (آية + تفسير) بتنسيق محدّث — HTML (Telegram).
+"""format-tail: تنسيق ذيل الرد (آية + تفسير) — نص عادي RTL، كل عنصر على سطر.
 
-الاستخدام: python3 quran/format-tail.py S:A
-يطبع JSON: {"key","surah","ayah","chunks":[{"aside": "..."}], "footer_placeholder"}
-- chunks: قائمة رسائل؛ الأولى تحمل verse+surah+hr+tafsir، والمتبقية continuations.
+الشكل المطلوب (بأمر محمد):
+🕌 ﴿ {verse} ﴾
+📖 سورة {name} — الآية {a}
+✨ التفسير (ابن كثير):
+🌿 {tafsir}
+💡 شرح AI: {ai_exp}
+
+- نص عادي بلا <b>/<i>/<hr/> — الفواصل أسطر فقط.
+- علامة RTL (U+200F) في أول كل سطر لمحاذاة اليمين.
+- الجمل المتعددة: كل جملة على سطر لوحده يبدأ بـ 🌿.
 - لا fallback، لا تفسير من النموذج.
 """
 import json, os, re, sys
@@ -43,30 +50,31 @@ if not verse or not tafsir:
 name = surah_name(s)
 sentences = split_sentences(tafsir)
 
-header = f"🕌 <b>﴿ {verse} ﴾</b>\n📖 سورة {name} — الآية {a}\n✨ التفسير (ابن كثير):\n<hr/>\n"
+RTL = "‏"
+header_lines = [
+    f"{RTL}🕌 ﴿ {verse} ﴾",
+    f"{RTL}📖 سورة {name} — الآية {a}",
+    f"{RTL}✨ التفسير (ابن كثير):",
+]
+tafsir_lines = [f"{RTL}🌿 {sent}" for sent in sentences]
+footer_line = f"{RTL}💡 شرح AI: {ai_exp}"
+
+all_lines = header_lines + tafsir_lines + [footer_line]
+
+# تقسيم الرسائل الطويلة على chunks مع الحفاظ على سطر-لكل-عنصر
 chunks = []
 current = ""
-is_first_chunk = True
-for sent in sentences:
-    line = f"🌿 <i>{sent}</i><br/>\n"
-    prefix = header if (current == "" and is_first_chunk) else ""
-    if current == "" and not is_first_chunk:
-        prefix = ""
-    if current and len(current) + len(line) > LIMIT:
+for ln in all_lines:
+    piece = ln + "<br/>\n"
+    if current and len(current) + len(piece) > LIMIT:
         chunks.append(current.rstrip())
         current = ""
-        is_first_chunk = False
-        prefix = ""
-    if current == "":
-        current = prefix
-    current += line
+    current += piece
 if current.strip():
     chunks.append(current.rstrip())
 
 if not chunks:
-    chunks = [header.rstrip()]
-
-chunks[-1] = chunks[-1].rstrip() + f"\n<hr/>\n💡 <b>شرح AI:</b> {ai_exp}"
+    chunks = ["<br/>\n".join(header_lines).rstrip()]
 
 out = {
     "key": key,
